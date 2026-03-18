@@ -5,6 +5,7 @@ import numpy as np
 import threading
 import os
 import pandas as pd
+import atexit
 from datetime import datetime
 from ids_peak import ids_peak, ids_peak_ipl_extension
 from ids_peak_ipl import ids_peak_ipl
@@ -23,15 +24,20 @@ if 'g_m' not in st.session_state:
     st.session_state.g_m = 1.0
 if 'b_m' not in st.session_state:
     st.session_state.b_m = 1.0
-
 if 'manual_cameras' not in st.session_state:
     st.session_state.manual_cameras = []
+if 'grid_selected_cameras' not in st.session_state:
+    st.session_state.grid_selected_cameras = []
+if 'ui_logs' not in st.session_state:
+    st.session_state.ui_logs = []
+if 'streamers' not in st.session_state:
+    st.session_state.streamers = {}
 
 # ================== CONFIG & PATHS ==================
-LOG_FILE_PATH = r"C:\Users\Hande\Desktop\inkjet\log.txt"
 CSV_FILE_PATH = r"C:\Users\Hande\Desktop\inkjet\denetim_kayitlari.csv"
 MODEL_PATH = r"C:\Users\Hande\Desktop\inkjet\train4_best.pt"
 TARGET_PIXEL_FORMAT = ids_peak_ipl.PixelFormatName_BGRa8
+MAX_UI_LOGS = 30
 
 # ================== VARSAYILAN IDS ==================
 DEFAULT_IDS_CAMERA = {
@@ -42,21 +48,44 @@ DEFAULT_IDS_CAMERA = {
     "manual": False
 }
 
-# ================== YARDIMCI FONKSİYONLAR ==================
-def log_to_system(msg, status="INFO"):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] [{status}] {msg}\n")
-    except:
-        pass
+# ================== SABİT IP KAMERALAR ==================
+EXTRA_IP_CAMERAS = [
+    {
+        "type": "ip",
+        "name": "IP Kamera",
+        "url": "rtsp://192.168.8.115:554/live/0",
+        "ip": "192.168.8.115",
+        "manual": False
+    },
+    {
+        "type": "ip",
+        "name": "IP Kamera",
+        "url": "rtsp://192.168.8.164:554/live/0",
+        "ip": "192.168.8.164",
+        "manual": False
+    }
+]
 
-    try:
-        file_exists = os.path.isfile(CSV_FILE_PATH)
-        df_new = pd.DataFrame([[timestamp, msg, status]], columns=["Tarih_Saat", "Mesaj", "Durum"])
-        df_new.to_csv(CSV_FILE_PATH, mode="a", index=False, header=not file_exists, encoding="utf-8-sig")
-    except:
-        pass
+# ================== YARDIMCI FONKSİYONLAR ==================
+def log_to_system(msg, status="INFO", save_csv=False, show_ui=True):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{timestamp}] [{status}] {msg}"
+
+    if show_ui:
+        logs = st.session_state.ui_logs
+        last_msg_only = logs[-1].split("] ", 2)[-1] if logs else None
+        if not logs or last_msg_only != f"[{status}] {msg}":
+            logs.append(line)
+            if len(logs) > MAX_UI_LOGS:
+                st.session_state.ui_logs = logs[-MAX_UI_LOGS:]
+
+    if save_csv:
+        try:
+            file_exists = os.path.isfile(CSV_FILE_PATH)
+            df_new = pd.DataFrame([[timestamp, msg, status]], columns=["Tarih_Saat", "Mesaj", "Durum"])
+            df_new.to_csv(CSV_FILE_PATH, mode="a", index=False, header=not file_exists, encoding="utf-8-sig")
+        except:
+            pass
 
 
 @st.cache_resource
@@ -87,6 +116,12 @@ def apply_sharpness(frame_bgr, sharpness_value):
 
 def safe_camera_label(index, cam):
     return f"Hat {index + 1} - {cam['name']}"
+
+
+def get_camera_key(cam):
+    if cam["type"] == "ids":
+        return f"ids_{cam.get('index', 0)}_{cam.get('name', 'cam')}"
+    return f"ip_{cam.get('ip', 'unknown')}_{cam.get('name', 'cam')}"
 
 
 def get_detected_ids_cameras():
@@ -120,11 +155,8 @@ def get_detected_ids_cameras():
                     "ip": "IDS / Yerel Bağlantı",
                     "manual": False
                 })
-
-        log_to_system(f"IDS tarama tamamlandı. Bulunan cihaz sayısı: {len(cameras)}", "INFO")
-
-    except Exception as e:
-        log_to_system(f"IDS kamera tarama hatası: {e}", "HATA")
+    except:
+        pass
 
     return cameras
 
@@ -133,21 +165,22 @@ def get_all_cameras():
     detected_ids = get_detected_ids_cameras()
     all_sources = []
 
-    # IDS bağlıysa gerçek kameraları al, bağlı değilse varsayılan bir IDS seçeneği göster
     if detected_ids:
         all_sources.extend(detected_ids)
     else:
         all_sources.append(DEFAULT_IDS_CAMERA.copy())
 
-    # Elle eklenen kameraları ekle
+    for cam in EXTRA_IP_CAMERAS:
+        all_sources.append(cam.copy())
+
     for cam in st.session_state.manual_cameras:
         all_sources.append(cam.copy())
 
-    # Hat 1 / Hat 2 / Hat 3 isimlendirmesi
     labeled_sources = []
     for i, cam in enumerate(all_sources):
         cam_copy = cam.copy()
         cam_copy["display_name"] = safe_camera_label(i, cam_copy)
+        cam_copy["cam_key"] = get_camera_key(cam_copy)
         labeled_sources.append(cam_copy)
 
     return labeled_sources
@@ -196,17 +229,16 @@ def add_manual_camera(camera_type, custom_name, ip_address="", rtsp_path="", ful
         raise ValueError("Geçersiz kamera tipi.")
 
     st.session_state.manual_cameras.append(camera)
-    log_to_system(f"Manuel kamera eklendi: {custom_name} ({camera_type.upper()})", "OK")
+    log_to_system(f"Manuel kamera eklendi: {custom_name} ({camera_type.upper()})", "OK", save_csv=True, show_ui=True)
 
 
 def remove_manual_camera(idx):
     if 0 <= idx < len(st.session_state.manual_cameras):
         removed = st.session_state.manual_cameras.pop(idx)
-        log_to_system(f"Manuel kamera silindi: {removed.get('name', 'Bilinmeyen')}", "UYARI")
+        log_to_system(f"Manuel kamera silindi: {removed.get('name', 'Bilinmeyen')}", "UYARI", save_csv=True, show_ui=True)
 
 
 # ================== KAMERA SINIFI ==================
-@st.cache_resource
 class CameraStreamer:
     def __init__(self):
         self.device = None
@@ -247,16 +279,11 @@ class CameraStreamer:
 
             if source_type == "ids":
                 return self._start_ids_camera(source_info.get("index", 0))
-
             elif source_type == "ip":
                 return self._start_ip_camera(source_info["url"])
-
             else:
-                log_to_system("Bilinmeyen kamera tipi", "HATA")
                 return False
-
-        except Exception as e:
-            log_to_system(f"Kamera başlatma hatası: {e}", "HATA")
+        except:
             self.stop()
             return False
 
@@ -285,18 +312,14 @@ class CameraStreamer:
         self.nodemap.FindNode("AcquisitionStart").Execute()
 
         self.running = True
-        log_to_system(f"IDS kamera başlatıldı: {self.source_info['display_name']}", "OK")
         threading.Thread(target=self._update_loop_ids, daemon=True).start()
         return True
 
     def _start_ip_camera(self, url):
-        log_to_system(f"IP kamera bağlanmaya çalışılıyor: {url}", "INFO")
-
         self.cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if not self.cap.isOpened():
-            log_to_system("FFMPEG ile açılamadı, normal bağlantı deneniyor...", "UYARI")
             try:
                 self.cap.release()
             except:
@@ -305,16 +328,15 @@ class CameraStreamer:
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if not self.cap.isOpened():
-            raise Exception(f"IP kamera açılamadı: {url}")
+            raise Exception(f"IP kamera açılamadı: {self.source_info['display_name']}")
 
         ret, test_frame = self.cap.read()
         if not ret or test_frame is None:
             self.cap.release()
             self.cap = None
-            raise Exception(f"Kamera açıldı ama görüntü gelmedi: {url}")
+            raise Exception(f"Kamera açıldı ama görüntü gelmedi: {self.source_info['display_name']}")
 
         self.running = True
-        log_to_system(f"IP kamera başlatıldı: {self.source_info['display_name']} - {url}", "OK")
         threading.Thread(target=self._update_loop_ip, daemon=True).start()
         return True
 
@@ -359,9 +381,7 @@ class CameraStreamer:
 
                 with self.lock:
                     self.latest_frame = frame_rgb
-
-            except Exception as e:
-                log_to_system(f"IDS akış hatası: {e}", "HATA")
+            except:
                 break
 
         self.running = False
@@ -374,7 +394,6 @@ class CameraStreamer:
                 ret, frame_bgr = self.cap.read()
 
                 if not ret or frame_bgr is None:
-                    log_to_system("IP kameradan görüntü alınamadı", "UYARI")
                     time.sleep(0.2)
                     continue
 
@@ -387,16 +406,14 @@ class CameraStreamer:
 
                 with self.lock:
                     self.latest_frame = frame_rgb
-
-            except Exception as e:
-                log_to_system(f"IP akış hatası: {e}", "HATA")
+            except:
                 break
 
         self.running = False
 
     def stop(self):
         self.running = False
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         try:
             if self.datastream:
@@ -425,10 +442,72 @@ class CameraStreamer:
         self.latest_frame = None
         self.current_fps = 0.0
 
-        log_to_system("Kamera durduruldu", "UYARI")
+
+streamers = st.session_state.streamers
 
 
-streamer = CameraStreamer()
+def get_or_create_streamer(cam_key):
+    if cam_key not in streamers:
+        streamers[cam_key] = CameraStreamer()
+    return streamers[cam_key]
+
+
+def stop_all_streamers():
+    for key, s in list(streamers.items()):
+        try:
+            s.stop()
+        except:
+            pass
+    streamers.clear()
+    st.session_state.streamers = streamers
+
+
+def stop_unselected_streamers(selected_keys):
+    for cam_key in list(streamers.keys()):
+        if cam_key not in selected_keys:
+            try:
+                streamers[cam_key].stop()
+            except:
+                pass
+            del streamers[cam_key]
+    st.session_state.streamers = streamers
+
+
+def any_camera_running():
+    return any(s.running for s in streamers.values())
+
+
+def total_fps():
+    vals = [s.current_fps for s in streamers.values() if s.running]
+    return sum(vals) if vals else 0.0
+
+
+def apply_settings_to_all_streamers():
+    settings = {
+        "br": st.session_state.br,
+        "ct": st.session_state.ct,
+        "sh": st.session_state.sh,
+        "r_m": st.session_state.r_m,
+        "g_m": st.session_state.g_m,
+        "b_m": st.session_state.b_m
+    }
+    for s in streamers.values():
+        s.img_settings.update(settings)
+
+
+def cleanup_all():
+    try:
+        for s in list(streamers.values()):
+            try:
+                s.stop()
+            except:
+                pass
+        streamers.clear()
+    except:
+        pass
+
+
+atexit.register(cleanup_all)
 
 # ================== ARAYÜZ ==================
 st.set_page_config(layout="wide", page_title="VISION-PRO V3.0", page_icon="👁️")
@@ -471,7 +550,25 @@ with st.sidebar:
 
     st.divider()
 
-    # ===== Kamera Ekleme Bölümü =====
+    all_cameras = get_all_cameras()
+    camera_names = [cam["display_name"] for cam in all_cameras]
+
+    if view_mode == "Izgara (Grid)":
+        st.subheader("🧩 Grid Kamera Seçimi")
+
+        default_grid_selection = st.session_state.grid_selected_cameras
+        valid_names = [name for name in default_grid_selection if name in camera_names]
+
+        selected_grid_camera_names = st.multiselect(
+            "Grid modunda açılacak kameralar",
+            options=camera_names,
+            default=valid_names if valid_names else camera_names[:2],
+            key="grid_camera_selector"
+        )
+
+        st.session_state.grid_selected_cameras = selected_grid_camera_names
+        st.divider()
+
     with st.expander("➕ Kamera Ekle", expanded=False):
         add_type = st.selectbox("Kamera Türü", ["IDS", "IP"], key="add_cam_type")
         add_name = st.text_input("Kamera Adı", value="", placeholder="Örn: Dolum Hattı", key="add_cam_name")
@@ -504,7 +601,6 @@ with st.sidebar:
             except Exception as e:
                 st.error(str(e))
 
-    # ===== Eklenen kameraları göster =====
     if st.session_state.manual_cameras:
         with st.expander("🗂️ Eklenen Kameralar", expanded=False):
             for i, cam in enumerate(st.session_state.manual_cameras):
@@ -519,8 +615,6 @@ with st.sidebar:
 
     st.divider()
 
-    all_cameras = get_all_cameras()
-    camera_names = [cam["display_name"] for cam in all_cameras]
     selected_cam_name = st.selectbox("Aktif Cihaz", camera_names)
 
     selected_source = next(
@@ -557,24 +651,29 @@ with st.sidebar:
         st.session_state.r_m = 1.0
         st.session_state.g_m = 1.0
         st.session_state.b_m = 1.0
+        apply_settings_to_all_streamers()
+        log_to_system("Görüntü ayarları sıfırlandı.", "INFO", save_csv=False, show_ui=True)
         st.rerun()
 
-    streamer.img_settings.update({
-        "br": st.session_state.br,
-        "ct": st.session_state.ct,
-        "sh": st.session_state.sh,
-        "r_m": st.session_state.r_m,
-        "g_m": st.session_state.g_m,
-        "b_m": st.session_state.b_m
-    })
+apply_settings_to_all_streamers()
+
+# ================== GRID İÇİN SEÇİLEN KAMERALAR ==================
+selected_grid_cameras = [
+    cam for cam in all_cameras
+    if cam["display_name"] in st.session_state.grid_selected_cameras
+]
+
+if not selected_grid_cameras and all_cameras:
+    selected_grid_cameras = all_cameras[:1]
 
 # ================== ÜST PANEL ==================
 selected_ip_text = selected_source.get("ip", "-")
+running_count = sum(1 for s in streamers.values() if s.running)
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Cihaz", selected_source["display_name"])
-m2.metric("Durum", "Online" if streamer.running else "Offline", delta="Aktif" if streamer.running else "Pasif")
-m3.metric("FPS", f"{streamer.current_fps:.1f}")
+m2.metric("Durum", "Online" if any_camera_running() else "Offline", delta=f"{running_count} Aktif")
+m3.metric("Toplam FPS", f"{total_fps():.1f}")
 m4.metric("Kamera IP", selected_ip_text)
 
 st.divider()
@@ -586,15 +685,52 @@ with left_col:
     st.write("### 🎮 Akış")
 
     if st.button("▶ Başlat", type="primary", use_container_width=True):
-        streamer.stop()
-        success = streamer.start(selected_source)
-        if success:
-            st.rerun()
+        if view_mode == "Tekli Odak":
+            stop_all_streamers()
+            s = get_or_create_streamer(selected_source["cam_key"])
+            s.img_settings.update({
+                "br": st.session_state.br,
+                "ct": st.session_state.ct,
+                "sh": st.session_state.sh,
+                "r_m": st.session_state.r_m,
+                "g_m": st.session_state.g_m,
+                "b_m": st.session_state.b_m
+            })
+            success = s.start(selected_source)
+            if success:
+                log_to_system(f"Kamera başlatıldı: {selected_source['display_name']}", "OK", save_csv=True, show_ui=True)
+            else:
+                log_to_system(f"Kamera başlatılamadı: {selected_source['display_name']}", "HATA", save_csv=True, show_ui=True)
+                st.error("Seçilen kamera başlatılamadı.")
         else:
-            st.error("Seçilen kamera başlatılamadı.")
+            selected_keys = [cam["cam_key"] for cam in selected_grid_cameras]
+            stop_unselected_streamers(selected_keys)
+
+            started_any = False
+            for cam in selected_grid_cameras:
+                s = get_or_create_streamer(cam["cam_key"])
+                s.img_settings.update({
+                    "br": st.session_state.br,
+                    "ct": st.session_state.ct,
+                    "sh": st.session_state.sh,
+                    "r_m": st.session_state.r_m,
+                    "g_m": st.session_state.g_m,
+                    "b_m": st.session_state.b_m
+                })
+                ok = s.start(cam)
+                if ok:
+                    started_any = True
+                    log_to_system(f"Kamera başlatıldı: {cam['display_name']}", "OK", save_csv=True, show_ui=True)
+
+            if not started_any:
+                log_to_system("Seçili grid kameraları başlatılamadı.", "HATA", save_csv=True, show_ui=True)
+                st.error("Seçili grid kameraları başlatılamadı.")
+
+        st.rerun()
 
     if st.button("■ Durdur", use_container_width=True):
-        streamer.stop()
+        stop_all_streamers()
+        log_to_system("Tüm kameralar durduruldu.", "INFO", save_csv=False, show_ui=True)
         st.rerun()
 
     if st.button("↺ Sıfırla", use_container_width=True):
@@ -606,63 +742,132 @@ with left_col:
             "g_m": 1.0,
             "b_m": 1.0
         })
+        apply_settings_to_all_streamers()
+        log_to_system("Görüntü ayarları sıfırlandı.", "INFO", save_csv=False, show_ui=True)
         st.rerun()
 
 with center_col:
     if view_mode == "Tekli Odak":
-        video_box = st.empty()
+        single_info = st.empty()
+        single_box = st.empty()
+        grid_boxes = []
     else:
-        grid_col1, grid_col2 = st.columns(2)
-        video_box = grid_col1.empty()
-        grid_col2.image(
-            np.zeros((450, 800, 3), dtype=np.uint8),
-            caption="Diğer Kamera Bekleniyor...",
-            use_container_width=True
-        )
+        grid_boxes = []
+        cols_per_row = 2
+        cams_to_show = selected_grid_cameras
+
+        for i in range(0, len(cams_to_show), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j in range(cols_per_row):
+                cam_index = i + j
+                if cam_index < len(cams_to_show):
+                    cam = cams_to_show[cam_index]
+                    with cols[j]:
+                        st.markdown(f"**{cam['display_name']}**")
+                        info = st.empty()
+                        box = st.empty()
+                        grid_boxes.append((cam, box, info))
+                else:
+                    with cols[j]:
+                        st.empty()
 
 with right_col:
     st.write("### 📊 Rapor")
     if os.path.exists(CSV_FILE_PATH):
         try:
             df = pd.read_csv(CSV_FILE_PATH)
-            st.metric("Tespit", len(df))
+            st.metric("Kayıt", len(df))
             with open(CSV_FILE_PATH, "rb") as f:
                 st.download_button("📥 CSV İndir", f, "rapor.csv", "text/csv")
         except:
-            st.metric("Tespit", 0)
+            st.metric("Kayıt", 0)
     else:
-        st.metric("Tespit", 0)
+        st.metric("Kayıt", 0)
 
-# ================== ALT PANEL ==================
 st.divider()
 st.write("### 📝 Sistem Terminali")
 log_container = st.empty()
 
 # ================== CANLI DÖNGÜ ==================
-if streamer.running:
-    while streamer.running:
-        with streamer.lock:
-            frame = streamer.latest_frame
+if any_camera_running():
+    while any_camera_running():
+        if view_mode == "Tekli Odak":
+            selected_streamer = get_or_create_streamer(selected_source["cam_key"])
+            with selected_streamer.lock:
+                frame = selected_streamer.latest_frame
+                fps = selected_streamer.current_fps
+                is_running = selected_streamer.running
 
-        if frame is not None:
-            video_box.image(frame, channels="RGB", use_container_width=True)
+            status_text = "Online" if is_running else "Offline"
+            single_info.caption(f"Durum: {status_text} | FPS: {fps:.1f}")
 
-        if os.path.exists(LOG_FILE_PATH):
-            try:
-                with open(LOG_FILE_PATH, "r", encoding="utf-8", errors="replace") as f:
-                    logs = f.readlines()[-10:]
-                    html_logs = "".join([f"<div>{l.strip()}</div>" for l in logs[::-1]])
-                    log_container.markdown(
-                        f"<div class='terminal-log'>{html_logs}</div>",
-                        unsafe_allow_html=True
+            if frame is not None:
+                single_box.image(frame, channels="RGB", use_container_width=True)
+            else:
+                single_box.image(
+                    np.zeros((450, 800, 3), dtype=np.uint8),
+                    caption="Görüntü Bekleniyor...",
+                    use_container_width=True
+                )
+        else:
+            for cam, box, info in grid_boxes:
+                s = get_or_create_streamer(cam["cam_key"])
+                with s.lock:
+                    frame = s.latest_frame
+                    fps = s.current_fps
+                    is_running = s.running
+
+                info.caption(f"Durum: {'Online' if is_running else 'Offline'} | FPS: {fps:.1f}")
+
+                if frame is not None:
+                    box.image(frame, channels="RGB", use_container_width=True)
+                else:
+                    box.image(
+                        np.zeros((350, 600, 3), dtype=np.uint8),
+                        caption=f"{cam['display_name']} - Görüntü Bekleniyor...",
+                        use_container_width=True
                     )
-            except:
-                pass
+
+        try:
+            logs = st.session_state.ui_logs[-8:]
+            html_logs = "".join([f"<div>{l}</div>" for l in logs[::-1]])
+            log_container.markdown(
+                f"<div class='terminal-log'>{html_logs}</div>",
+                unsafe_allow_html=True
+            )
+        except:
+            pass
 
         time.sleep(0.03)
 else:
-    video_box.image(
-        np.zeros((450, 800, 3), dtype=np.uint8),
-        caption="Kamera Kapalı",
-        use_container_width=True
-    )
+    if view_mode == "Tekli Odak":
+        single_info = st.empty()
+        single_box = st.empty()
+
+        single_info.caption("Durum: Offline | FPS: 0.0")
+        single_box.image(
+            np.zeros((450, 800, 3), dtype=np.uint8),
+            caption="Kamera Kapalı",
+            use_container_width=True
+        )
+    else:
+        cols_per_row = 2
+        cams_to_show = selected_grid_cameras
+
+        if cams_to_show:
+            for i in range(0, len(cams_to_show), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    cam_index = i + j
+                    if cam_index < len(cams_to_show):
+                        cam = cams_to_show[cam_index]
+                        with cols[j]:
+                            st.markdown(f"**{cam['display_name']}**")
+                            st.caption("Durum: Offline | FPS: 0.0")
+                            st.image(
+                                np.zeros((350, 600, 3), dtype=np.uint8),
+                                caption=f"{cam['display_name']} - Kamera Kapalı",
+                                use_container_width=True
+                            )
+        else:
+            st.info("Grid için en az bir kamera seç.")

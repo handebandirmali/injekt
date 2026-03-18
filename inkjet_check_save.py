@@ -7,6 +7,10 @@ import time
 save_dir = r"C:\Users\Hande\Desktop\inkjet\save4"
 save_dir2 = r"C:\Users\Hande\Desktop\inkjet\save4_2"
 
+os.makedirs(save_dir, exist_ok=True)
+os.makedirs(save_dir2, exist_ok=True)
+
+
 class InkjetCheck:
     def __init__(self, inkjet_model_path):
         self.inkjet_model = YOLO(inkjet_model_path)
@@ -14,46 +18,77 @@ class InkjetCheck:
         self.save_dir = save_dir
         self.save_dir2 = save_dir2
 
+        # Son durum takibi
+        self.last_status = None          # "detected" / "not_found"
+        self.last_save_time = 0
+        self.min_save_interval = 10      # aynı olaylar arasında en az 3 sn bekle
+
+    def _should_save_and_log(self, current_status):
+        now = time.time()
+
+        # Durum değiştiyse kaydet/logla
+        if current_status != self.last_status:
+            self.last_status = current_status
+            self.last_save_time = now
+            return True
+
+        # Durum aynıysa sürekli spam yapma
+        if now - self.last_save_time >= self.min_save_interval:
+            self.last_save_time = now
+            return True
+
+        return False
+
+    def _generate_filename(self, folder):
+        # milisaniyeli ad üretelim ki çakışma olmasın
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        ms = int((time.time() % 1) * 1000)
+        return os.path.join(folder, f"{timestamp}_{ms:03d}.jpg")
+
     def check(self, frame):
         """Inkjet tespiti yapar, işlenmiş frame döner."""
         org_h, org_w = frame.shape[:2]
 
         # GUI performansı için küçültme
-        frame_resized = cv2.resize(frame, (org_w // 4, org_h // 4))
+        new_w = max(org_w // 4, 1)
+        new_h = max(org_h // 4, 1)
+        frame_resized = cv2.resize(frame, (new_w, new_h))
 
-        # ================================================================
-        # GÜNCELLEME: conf, iou ve verbose parametreleri doğrudan modele eklendi.
-        # iou=0.3 sayesinde üst üste binen kutulardan sadece en iyisi kalır.
-        # ================================================================
-        results = self.inkjet_model(frame_resized, conf=self.threshold, iou=0.3, verbose=False)[0]
-        
+        results = self.inkjet_model(
+            frame_resized,
+            conf=self.threshold,
+            iou=0.3,
+            verbose=False
+        )[0]
+
         detected = False
 
-        # Model zaten threshold'un altındakileri elediği için doğrudan çizebiliriz
         for box, conf in zip(results.boxes.xyxy, results.boxes.conf):
             detected = True
             x1, y1, x2, y2 = map(int, box)
             cv2.rectangle(frame_resized, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame_resized, f"inkjet {conf:.2f}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            cv2.putText(
+                frame_resized,
+                f"inkjet {conf:.2f}",
+                (x1, max(y1 - 10, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 255, 0),
+                2
+            )
 
-        # Log bilgisi ve resim kaydetme işlemleri (Hiç dokunulmadı)
-        if detected:
-            log("Inkjet detected")
+        current_status = "detected" if detected else "not_found"
 
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.save_dir, f"{timestamp}.jpg")
+        if self._should_save_and_log(current_status):
+            if detected:
+                log("Inkjet detected")
+                filename = self._generate_filename(self.save_dir)
+                cv2.imwrite(filename, frame_resized)
+                log(f"Frame saved: {filename}")
+            else:
+                log("Inkjet not found!")
+                filename = self._generate_filename(self.save_dir2)
+                cv2.imwrite(filename, frame_resized)
+                log(f"Frame saved: {filename}")
 
-            cv2.imwrite(filename, frame_resized)
-            log(f"Frame saved: {filename}")
-
-        else:
-            log("Inkjet not found!")
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.save_dir2, f"{timestamp}.jpg")
-
-            cv2.imwrite(filename, frame_resized)
-            log(f"Frame saved: {filename}")
-
-        # GUI’ye geri gönder
         return frame_resized
