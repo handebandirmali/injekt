@@ -1,34 +1,52 @@
 import datetime
 import csv
 import os
+import streamlit as st
 
 log_file_path = r"C:\Users\Hande\Desktop\inkjet\log.txt"
 csv_file_path = r"C:\Users\Hande\Desktop\inkjet\denetim_kayitlari.csv"
+MAX_UI_LOGS = 30
 
-def log(msg):
-    # 1. Mevcut TXT Loglama 
-    try: 
-        with open(log_file_path, "a", encoding="utf-8") as f:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{timestamp}] {msg}\n")
-    except Exception:
-        pass 
 
-    # 2. Yeni CSV Loglama 
+def log_to_system(msg, status="INFO", save_csv=False, show_ui=True):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # TXT LOG
     try:
-        # Mesajın içeriğine göre durum belirleyelim
-        status = "OK" if "detected" in msg.lower() else "NG"
-        if "not found" in msg.lower(): status = "NG"
-        
-        file_exists = os.path.isfile(csv_file_path)
-        
-        with open(csv_file_path, mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            # Dosya ilk kez oluşturuluyorsa başlıkları yaz
-            if not file_exists:
-                writer.writerow(['Tarih_Saat', 'Mesaj', 'Durum'])
-            
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow([timestamp, msg, status])
-    except Exception:
+        with open(log_file_path, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] [{status}] {msg}\n")
+    except:
         pass
+
+    # STREAMLIT LOG
+    if show_ui:
+        try:
+            if "ui_logs" not in st.session_state:
+                st.session_state.ui_logs = []
+
+            st.session_state.ui_logs.append(f"[{timestamp}] [{status}] {msg}")
+
+            if len(st.session_state.ui_logs) > MAX_UI_LOGS:
+                st.session_state.ui_logs = st.session_state.ui_logs[-MAX_UI_LOGS:]
+        except:
+            pass
+
+    # CSV LOG
+    if save_csv:
+        try:
+            file_exists = os.path.isfile(csv_file_path)
+
+            with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+
+                if not file_exists:
+                    writer.writerow(["Tarih_Saat", "Mesaj", "Durum"])
+
+                writer.writerow([timestamp, msg, status])
+        except:
+            pass
+
+
+# eski sistem için de çalışsın
+def log(msg):
+    log_to_system(msg, status="INFO", save_csv=True, show_ui=True)
