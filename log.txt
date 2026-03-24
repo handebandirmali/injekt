@@ -1,0 +1,63 @@
+[2026-03-24 11:44:30] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 11:50:38] [INFO] Görüntü ayarları sıfırlandı: Hat 2 - IP Kamera
+[2026-03-24 11:50:41] [INFO] Görüntü ayarları sıfırlandı: Hat 2 - IP Kamera
+[2026-03-24 11:50:43] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 11:58:56] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 11:58:58] [INFO] Tüm kameralar durduruldu.
+[2026-03-24 11:58:59] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 12:00:00] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 13:02:53] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 13:39:44] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 13:39:46] [INFO] Tüm kameralar durduruldu.
+[2026-03-24 13:39:48] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 13:47:48] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:14] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:18] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:53:21] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:25] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:26] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:29] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:53:32] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:53:39] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:41] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:53:43] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:50] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:53:52] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:54] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:53:55] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:10] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:30] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:40] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:48] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:49] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:54:53] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:54:55] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:00] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:02] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:09] [INFO] Görüntü ayarları sıfırlandı: Hat 2 - IP Kamera
+[2026-03-24 13:55:14] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:20] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 13:55:22] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 13:55:27] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:38] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:55:41] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:55:43] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:55:44] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:47] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:50] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:55:54] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:55:59] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:56:02] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:56:10] [INFO] Görüntü ayarları sıfırlandı: Hat 3 - IP Kamera
+[2026-03-24 13:56:14] [INFO] Tüm kamera ayarları temizlendi.
+[2026-03-24 13:58:28] [HATA] Kamera başlatılamadı: Hat 1 - IDS Kamera
+[2026-03-24 15:22:43] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:22:47] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:22:57] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:22:59] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:23:01] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:23:04] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:27:05] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:27:47] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:27:50] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
+[2026-03-24 15:30:17] [INFO] Görüntü ayarları sıfırlandı: Hat 1 - IDS Kamera
