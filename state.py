@@ -15,3 +15,6 @@ def init_session_state():
 
     if "camera_settings" not in st.session_state:
         st.session_state.camera_settings = {}
+
+    if "last_cset_export" not in st.session_state:
+        st.session_state.last_cset_export = None

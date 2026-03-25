@@ -1,10 +1,11 @@
 import atexit
 import threading
 import time
+import traceback
 
 import cv2
-import streamlit as st
 import numpy as np
+import streamlit as st
 from ids_peak import ids_peak, ids_peak_ipl_extension
 from ids_peak_ipl import ids_peak_ipl
 
@@ -12,7 +13,7 @@ from config import TARGET_PIXEL_FORMAT
 from core.detector import load_detector
 from core.image_utils import apply_sharpness
 from core.settings_manager import get_camera_settings, get_default_image_settings
-
+from reject.reject_timer import RejectTimer
 
 detector = load_detector()
 
@@ -34,16 +35,28 @@ class CameraStreamer:
 
         self.img_settings = get_default_image_settings()
 
+        self.last_error = None
+        self.access_mode = None  # "control" | "readonly" | None
+
+        self.reject_timer = RejectTimer(
+            delay_seconds=1.20,
+            pulse_seconds=0.15,
+            cooldown_seconds=0.70
+        )
+        self.reject_enabled = True
+
         try:
             ids_peak.Library.Initialize()
-        except:
-            pass
+        except Exception as e:
+            self.last_error = f"ids_peak.Library.Initialize hatası: {e}"
 
     def start(self, source_info):
         if self.running:
             self.stop()
 
         self.source_info = source_info
+        self.last_error = None
+        self.access_mode = None
 
         try:
             source_type = source_info.get("type")
@@ -53,63 +66,200 @@ class CameraStreamer:
             elif source_type == "ip":
                 return self._start_ip_camera(source_info["url"])
             else:
+                self.last_error = f"Bilinmeyen kamera tipi: {source_type}"
                 return False
-        except:
+
+        except Exception as e:
+            self.last_error = f"start() hatası: {e}\n{traceback.format_exc()}"
             self.stop()
             return False
 
+    def _open_ids_device_with_fallback(self, dev):
+        attempts = []
+
+        access_modes = [
+            ("control", getattr(ids_peak, "DeviceAccessType_Control", None)),
+            ("readonly", getattr(ids_peak, "DeviceAccessType_ReadOnly", None)),
+        ]
+
+        for label, mode in access_modes:
+            if mode is None:
+                continue
+
+            try:
+                opened = dev.OpenDevice(mode)
+                if opened is not None:
+                    return opened, label
+            except Exception as e:
+                attempts.append(f"{label}: {e}")
+
+        raise Exception(" | ".join(attempts) if attempts else "Uygun access mode bulunamadı.")
+
     def _start_ids_camera(self, camera_index=0):
-        device_manager = ids_peak.DeviceManager.Instance()
-        device_manager.Update()
-        devices = device_manager.Devices()
+        try:
+            device_manager = ids_peak.DeviceManager.Instance()
+            device_manager.Update()
+            devices = device_manager.Devices()
 
-        if devices.empty():
-            raise Exception("IDS kamera bağlı değil veya sistem tarafından görülmüyor.")
+            if devices.empty():
+                raise Exception("IDS kamera bağlı değil veya sistem tarafından görülmüyor.")
 
-        if camera_index >= len(devices):
-            raise Exception(f"İstenen IDS kamera indexi bulunamadı: {camera_index}")
+            try:
+                device_count = len(devices)
+            except Exception:
+                device_count = devices.size()
 
-        self.device = devices[camera_index].OpenDevice(ids_peak.DeviceAccessType_Control)
-        self.datastream = self.device.DataStreams()[0].OpenDataStream()
-        self.nodemap = self.device.RemoteDevice().NodeMaps()[0]
+            if camera_index >= device_count:
+                raise Exception(f"İstenen IDS kamera indexi bulunamadı: {camera_index}")
 
-        payload_size = self.nodemap.FindNode("PayloadSize").Value()
+            dev = devices[camera_index]
 
-        for _ in range(self.datastream.NumBuffersAnnouncedMinRequired()):
-            buf = self.datastream.AllocAndAnnounceBuffer(payload_size)
-            self.datastream.QueueBuffer(buf)
+            try:
+                model = dev.ModelName()
+            except Exception:
+                model = "Bilinmeyen Model"
 
-        self.datastream.StartAcquisition()
-        self.nodemap.FindNode("AcquisitionStart").Execute()
+            try:
+                serial = dev.SerialNumber()
+            except Exception:
+                serial = "Bilinmeyen Seri"
 
-        self.running = True
-        threading.Thread(target=self._update_loop_ids, daemon=True).start()
-        return True
+            self.device, self.access_mode = self._open_ids_device_with_fallback(dev)
+
+            if self.device is None:
+                raise Exception("OpenDevice başarısız oldu.")
+
+            data_streams = self.device.DataStreams()
+            if len(data_streams) == 0:
+                raise Exception("Kamerada açılabilir DataStream bulunamadı.")
+
+            self.datastream = data_streams[0].OpenDataStream()
+            if self.datastream is None:
+                raise Exception("DataStream açılamadı.")
+
+            remote_device = self.device.RemoteDevice()
+            if remote_device is None:
+                raise Exception("RemoteDevice alınamadı.")
+
+            node_maps = remote_device.NodeMaps()
+            if len(node_maps) == 0:
+                raise Exception("NodeMap bulunamadı.")
+
+            self.nodemap = node_maps[0]
+
+            payload_node = self.nodemap.FindNode("PayloadSize")
+            if payload_node is None:
+                raise Exception("PayloadSize node'u bulunamadı.")
+
+            payload_size = payload_node.Value()
+            if payload_size is None or int(payload_size) <= 0:
+                raise Exception(f"Geçersiz PayloadSize değeri: {payload_size}")
+
+            min_required = self.datastream.NumBuffersAnnouncedMinRequired()
+            if min_required <= 0:
+                min_required = 3
+
+            for _ in range(min_required):
+                buf = self.datastream.AllocAndAnnounceBuffer(payload_size)
+                self.datastream.QueueBuffer(buf)
+
+            self.datastream.StartAcquisition()
+
+            acq_start = self.nodemap.FindNode("AcquisitionStart")
+            if acq_start is None:
+                raise Exception("AcquisitionStart node'u bulunamadı.")
+
+            acq_start.Execute()
+
+            self.running = True
+            self.last_error = None
+            threading.Thread(target=self._update_loop_ids, daemon=True).start()
+            return True
+
+        except Exception as e:
+            self.last_error = (
+                f"IDS start hatası: {e}\n"
+                f"Kamera index: {camera_index}\n"
+                f"Kaynak: {self.source_info}\n"
+                f"Model/Seri: {locals().get('model', '?')} / {locals().get('serial', '?')}\n"
+                f"{traceback.format_exc()}"
+            )
+            self.stop()
+            return False
 
     def _start_ip_camera(self, url):
-        self.cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-        if not self.cap.isOpened():
-            try:
-                self.cap.release()
-            except:
-                pass
-            self.cap = cv2.VideoCapture(url)
+        try:
+            self.cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        if not self.cap.isOpened():
-            raise Exception(f"IP kamera açılamadı: {self.source_info['display_name']}")
+            if not self.cap.isOpened():
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
 
-        ret, test_frame = self.cap.read()
-        if not ret or test_frame is None:
-            self.cap.release()
-            self.cap = None
-            raise Exception(f"Kamera açıldı ama görüntü gelmedi: {self.source_info['display_name']}")
+                self.cap = cv2.VideoCapture(url)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        self.running = True
-        threading.Thread(target=self._update_loop_ip, daemon=True).start()
-        return True
+            if not self.cap.isOpened():
+                raise Exception(f"IP kamera açılamadı: {self.source_info['display_name']}")
+
+            ret, test_frame = self.cap.read()
+            if not ret or test_frame is None:
+                self.cap.release()
+                self.cap = None
+                raise Exception(f"Kamera açıldı ama görüntü gelmedi: {self.source_info['display_name']}")
+
+            self.running = True
+            self.last_error = None
+            self.access_mode = None
+            threading.Thread(target=self._update_loop_ip, daemon=True).start()
+            return True
+
+        except Exception as e:
+            self.last_error = f"IP start hatası: {e}\n{traceback.format_exc()}"
+            self.stop()
+            return False
+
+    def _extract_detector_result(self):
+        detected = False
+        meta = {}
+
+        try:
+            if hasattr(detector, "last_status"):
+                detected = str(detector.last_status).lower() == "detected"
+            elif hasattr(detector, "last_detected"):
+                detected = bool(detector.last_detected)
+            elif hasattr(detector, "detected"):
+                detected = bool(detector.detected)
+        except Exception:
+            detected = False
+
+        try:
+            if hasattr(detector, "last_confidence"):
+                meta["confidence"] = float(detector.last_confidence)
+        except Exception:
+            pass
+
+        try:
+            if hasattr(detector, "last_box_count"):
+                meta["box_count"] = int(detector.last_box_count)
+        except Exception:
+            pass
+
+        try:
+            if self.source_info:
+                meta["camera"] = self.source_info.get("display_name", "unknown")
+        except Exception:
+            pass
+
+        return detected, meta
+
+    def _handle_reject_if_needed(self):
+        try:
+            self.reject_timer.process()
+        except Exception:
+            pass
 
     def _process_frame(self, frame_bgr):
         sets = self.img_settings
@@ -130,6 +280,13 @@ class CameraStreamer:
         if self.ai_enabled:
             frame_bgr = detector.check(frame_bgr)
 
+            detected, meta = self._extract_detector_result()
+            if self.reject_enabled and detected:
+                self.reject_timer.schedule(
+                    source="AI_DETECT",
+                    meta=meta
+                )
+
         return frame_bgr
 
     def _update_loop_ids(self):
@@ -144,6 +301,7 @@ class CameraStreamer:
 
                 frame_bgr = converted.get_numpy_3D()[:, :, :3].copy()
                 frame_bgr = self._process_frame(frame_bgr)
+                self._handle_reject_if_needed()
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
                 now = time.time()
@@ -152,7 +310,9 @@ class CameraStreamer:
 
                 with self.lock:
                     self.latest_frame = frame_rgb
-            except:
+
+            except Exception as e:
+                self.last_error = f"IDS update loop hatası: {e}\n{traceback.format_exc()}"
                 break
 
         self.running = False
@@ -169,6 +329,7 @@ class CameraStreamer:
                     continue
 
                 frame_bgr = self._process_frame(frame_bgr)
+                self._handle_reject_if_needed()
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
                 now = time.time()
@@ -177,7 +338,9 @@ class CameraStreamer:
 
                 with self.lock:
                     self.latest_frame = frame_rgb
-            except:
+
+            except Exception as e:
+                self.last_error = f"IP update loop hatası: {e}\n{traceback.format_exc()}"
                 break
 
         self.running = False
@@ -187,23 +350,28 @@ class CameraStreamer:
         time.sleep(0.1)
 
         try:
+            self.reject_timer.clear_queue()
+        except Exception:
+            pass
+
+        try:
             if self.datastream:
                 self.datastream.KillWait()
                 self.datastream.StopAcquisition(ids_peak.AcquisitionStopMode_Default)
                 self.datastream.Flush(ids_peak.DataStreamFlushMode_DiscardAll)
-        except:
+        except Exception:
             pass
 
         try:
             if self.device:
                 self.device.Close()
-        except:
+        except Exception:
             pass
 
         try:
             if self.cap is not None:
                 self.cap.release()
-        except:
+        except Exception:
             pass
 
         self.device = None
@@ -212,6 +380,7 @@ class CameraStreamer:
         self.cap = None
         self.latest_frame = None
         self.current_fps = 0.0
+        self.access_mode = None
 
 
 def get_streamers():
@@ -237,7 +406,7 @@ def stop_all_streamers():
     for _, s in list(streamers.items()):
         try:
             s.stop()
-        except:
+        except Exception:
             pass
     streamers.clear()
     st.session_state.streamers = streamers
@@ -249,7 +418,7 @@ def stop_unselected_streamers(selected_keys):
         if cam_key not in selected_keys:
             try:
                 streamers[cam_key].stop()
-            except:
+            except Exception:
                 pass
             del streamers[cam_key]
     st.session_state.streamers = streamers
@@ -272,11 +441,31 @@ def cleanup_all():
         for s in list(streamers.values()):
             try:
                 s.stop()
-            except:
+            except Exception:
                 pass
         streamers.clear()
-    except:
+    except Exception:
         pass
+
+
+def get_streamer(cam_key):
+    streamers = get_streamers()
+    return streamers.get(cam_key)
+
+
+def get_active_ids_streamer(cam_key):
+    s = get_streamer(cam_key)
+    if s is None:
+        return None
+    if not s.running:
+        return None
+    if s.source_info is None:
+        return None
+    if s.source_info.get("type") != "ids":
+        return None
+    if s.device is None:
+        return None
+    return s
 
 
 atexit.register(cleanup_all)
