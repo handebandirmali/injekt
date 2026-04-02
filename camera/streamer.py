@@ -12,7 +12,11 @@ from ids_peak_ipl import ids_peak_ipl
 from config import TARGET_PIXEL_FORMAT
 from core.detector import load_detector
 from core.image_utils import apply_sharpness
-from core.settings_manager import get_camera_settings, get_default_image_settings
+from core.settings_manager import (
+    get_camera_settings,
+    get_default_image_settings,
+    get_reject_settings,
+)
 from reject.reject_timer import RejectTimer
 
 detector = load_detector()
@@ -38,10 +42,11 @@ class CameraStreamer:
         self.last_error = None
         self.access_mode = None  # "control" | "readonly" | None
 
+        reject_settings = get_reject_settings()
+        gecikme = reject_settings.get("gecikme_suresi", reject_settings.get("delay_seconds", 1.20))
+
         self.reject_timer = RejectTimer(
-            delay_seconds=1.20,
-            pulse_seconds=0.15,
-            cooldown_seconds=0.70
+            gecikme_suresi=gecikme
         )
         self.reject_enabled = True
 
@@ -50,6 +55,14 @@ class CameraStreamer:
         except Exception as e:
             self.last_error = f"ids_peak.Library.Initialize hatası: {e}"
 
+    def refresh_reject_settings(self):
+        settings = get_reject_settings()
+        gecikme = settings.get("gecikme_suresi", settings.get("delay_seconds", 1.20))
+
+        self.reject_timer.update_settings(
+            gecikme_suresi=gecikme
+        )
+
     def start(self, source_info):
         if self.running:
             self.stop()
@@ -57,6 +70,7 @@ class CameraStreamer:
         self.source_info = source_info
         self.last_error = None
         self.access_mode = None
+        self.refresh_reject_settings()
 
         try:
             source_type = source_info.get("type")
@@ -399,6 +413,21 @@ def apply_settings_to_streamer(cam_key):
     if cam_key in streamers:
         cam_settings = get_camera_settings(cam_key)
         streamers[cam_key].img_settings.update(cam_settings)
+
+
+def apply_reject_settings_to_streamer(cam_key):
+    streamers = get_streamers()
+    if cam_key in streamers:
+        streamers[cam_key].refresh_reject_settings()
+
+
+def apply_reject_settings_to_all_streamers():
+    streamers = get_streamers()
+    for _, streamer in streamers.items():
+        try:
+            streamer.refresh_reject_settings()
+        except Exception:
+            pass
 
 
 def stop_all_streamers():

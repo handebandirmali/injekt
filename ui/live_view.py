@@ -72,7 +72,6 @@ def render_single_offline(selected_source):
         </div>
         <div class="ids-empty-state">
             <div class="ids-empty-title">Kamera Kapalı</div>
-            <div class="ids-empty-subtitle">Görüntü akışı başlatıldığında burada canlı yayın görünecek.</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
