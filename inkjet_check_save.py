@@ -18,7 +18,11 @@ class InkjetCheck:
         self.save_dir = save_dir
         self.save_dir2 = save_dir2
 
+<<<<<<< HEAD
         
+=======
+        # Son durum takibi
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
         self.last_status = None          # "detected" / "not_found"
         self.last_save_time = 0
         self.min_save_interval = 10      # aynı olaylar arasında en az 3 sn bekle
@@ -32,7 +36,11 @@ class InkjetCheck:
             self.last_save_time = now
             return True
 
+<<<<<<< HEAD
        
+=======
+        # Durum aynıysa sürekli spam yapma
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
         if now - self.last_save_time >= self.min_save_interval:
             self.last_save_time = now
             return True
@@ -40,7 +48,11 @@ class InkjetCheck:
         return False
 
     def _generate_filename(self, folder):
+<<<<<<< HEAD
      
+=======
+        # milisaniyeli ad üretelim ki çakışma olmasın
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         ms = int((time.time() % 1) * 1000)
         return os.path.join(folder, f"{timestamp}_{ms:03d}.jpg")
@@ -49,7 +61,11 @@ class InkjetCheck:
         """Inkjet tespiti yapar, işlenmiş frame döner."""
         org_h, org_w = frame.shape[:2]
 
+<<<<<<< HEAD
       
+=======
+        # GUI performansı için küçültme
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
         new_w = max(org_w // 4, 1)
         new_h = max(org_h // 4, 1)
         frame_resized = cv2.resize(frame, (new_w, new_h))

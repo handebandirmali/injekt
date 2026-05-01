@@ -1,6 +1,7 @@
 import os
 import time
 
+<<<<<<< HEAD
 import streamlit as st
 
 from config import CSV_FILE_PATH
@@ -24,6 +25,23 @@ def render_top_metrics(selected_source, streamers=None):
     status_text = "ONLINE" if service.get("running") else "OFFLINE"
     ip_text = selected.get("ip") or selected_source.get("ip", "-")
     cam_text = selected.get("display_name") or selected_source.get("display_name")
+=======
+import pandas as pd
+import streamlit as st
+
+from camera.streamer import any_camera_running, get_or_create_streamer, total_fps
+from config import CSV_FILE_PATH
+
+
+def render_top_metrics(selected_source, streamers):
+    selected_ip_text = selected_source.get("ip", "-")
+    running_count = sum(1 for s in streamers.values() if s.running)
+
+    status_text = "ONLINE" if any_camera_running() else "OFFLINE"
+    fps_text = f"{total_fps():.1f}"
+    cam_text = selected_source["display_name"]
+    ip_text = selected_ip_text
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
 
     st.markdown(f"""
     <div class="ids-metric-bar">
@@ -32,12 +50,20 @@ def render_top_metrics(selected_source, streamers=None):
             <div class="ids-metric-v">{cam_text}</div>
         </div>
         <div class="ids-metric">
+<<<<<<< HEAD
             <div class="ids-metric-k">Worker Status</div>
+=======
+            <div class="ids-metric-k">System Status</div>
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
             <div class="ids-metric-v">{status_text} ({running_count})</div>
         </div>
         <div class="ids-metric">
             <div class="ids-metric-k">Total FPS</div>
+<<<<<<< HEAD
             <div class="ids-metric-v">{total_fps:.1f}</div>
+=======
+            <div class="ids-metric-v">{fps_text}</div>
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
         </div>
         <div class="ids-metric">
             <div class="ids-metric-k">Connection</div>
@@ -55,11 +81,16 @@ def render_right_report_panel():
                 f,
                 "rapor.csv",
                 "text/csv",
+<<<<<<< HEAD
                 use_container_width=True,
+=======
+                use_container_width=True
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
             )
 
 
 def render_terminal(log_container):
+<<<<<<< HEAD
     logs = read_recent_logs(limit=8)
     html_logs = "".join([f"<div>{l}</div>" for l in logs[::-1]])
     log_container.markdown(
@@ -102,6 +133,43 @@ def render_single_live(selected_source, log_container):
         frame_path = selected_status.get("frame_path")
         detected   = selected_status.get("detected")
         err_text   = selected_status.get("last_error")
+=======
+    try:
+        logs = st.session_state.ui_logs[-8:]
+        html_logs = "".join([f"<div>{l}</div>" for l in logs[::-1]])
+        log_container.markdown(
+            f"<div class='terminal-log'>{html_logs}</div>",
+            unsafe_allow_html=True
+        )
+    except Exception:
+        pass
+
+
+def render_single_offline(selected_source):
+    st.markdown(f"""
+    <div class="ids-preview-card">
+        <div class="ids-preview-topbar">
+            <div class="ids-preview-label">{selected_source['display_name']}</div>
+            <div class="ids-preview-meta">Offline / No active stream</div>
+        </div>
+        <div class="ids-empty-state">
+            <div class="ids-empty-title">Kamera Kapalı</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_single_live(selected_source, log_container):
+    shell = st.empty()
+    img_box = st.empty()
+
+    while any_camera_running():
+        selected_streamer = get_or_create_streamer(selected_source["cam_key"])
+        with selected_streamer.lock:
+            frame = selected_streamer.latest_frame
+            fps = selected_streamer.current_fps
+            is_running = selected_streamer.running
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
 
         shell.markdown(f"""
         <div class="ids-preview-shell">
@@ -112,6 +180,7 @@ def render_single_live(selected_source, log_container):
         </div>
         """, unsafe_allow_html=True)
 
+<<<<<<< HEAD
         if frame_path and os.path.exists(frame_path):
             img_box.image(frame_path, use_container_width=True)
         else:
@@ -129,6 +198,22 @@ def render_single_live(selected_source, log_container):
 
         render_terminal(log_container)
         time.sleep(0.40)
+=======
+        if frame is not None:
+            img_box.image(frame, channels="RGB", use_container_width=True)
+        else:
+            img_box.markdown("""
+            <div class="ids-preview-card">
+                <div class="ids-empty-state">
+                    <div class="ids-empty-title">Görüntü Bekleniyor</div>
+                    <div class="ids-empty-subtitle">Kamera açık ama henüz frame gelmedi.</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        render_terminal(log_container)
+        time.sleep(0.03)
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
 
 
 def render_live_area():
@@ -138,4 +223,11 @@ def render_live_area():
 
 def render_center_view(center_col, selected_source, log_container):
     with center_col:
+<<<<<<< HEAD
         render_single_live(selected_source, log_container)
+=======
+        if any_camera_running():
+            render_single_live(selected_source, log_container)
+        else:
+            render_single_offline(selected_source)
+>>>>>>> e676ff9672229d0236498e41b759b39286e1c50d
