@@ -1,0 +1,8 @@
+Tarih_Saat,Mesaj,Durum
+2026-04-23 17:48:23,Background worker başlatıldı.,OK
+2026-04-23 17:48:24,"Background worker kamera başlatamadı: Hat 1 - IDS Kamera | IDS start hatası: IDS kamera bağlı değil veya sistem tarafından görülmüyor.
+Traceback (most recent call last):
+  File ""C:\Users\Hande\Desktop\inkjet\camera\streamer.py"", line 138, in _start_ids_camera
+    raise Exception(""IDS kamera bağlı değil veya sistem tarafından görülmüyor."")
+Exception: IDS kamera bağlı değil veya sistem tarafından görülmüyor.
+",HATA

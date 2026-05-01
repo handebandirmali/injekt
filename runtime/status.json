@@ -1,0 +1,29 @@
+{
+  "service": {
+    "running": true,
+    "started_at": "2026-04-23 17:48:23",
+    "heartbeat": "2026-04-23 17:48:23",
+    "pid": 15176,
+    "version": "background-worker-v1"
+  },
+  "cameras": {
+    "ids_0_IDS Kamera": {
+      "running": false,
+      "fps": 0.0,
+      "last_error": "IDS start hatası: IDS kamera bağlı değil veya sistem tarafından görülmüyor.\nTraceback (most recent call last):\n  File \"C:\\Users\\Hande\\Desktop\\inkjet\\camera\\streamer.py\", line 138, in _start_ids_camera\n    raise Exception(\"IDS kamera bağlı değil veya sistem tarafından görülmüyor.\")\nException: IDS kamera bağlı değil veya sistem tarafından görülmüyor.\n",
+      "source_info": {
+        "type": "ids",
+        "name": "IDS Kamera",
+        "index": 0,
+        "ip": "IDS / Yerel Bağlantı",
+        "manual": false,
+        "display_name": "Hat 1 - IDS Kamera",
+        "cam_key": "ids_0_IDS Kamera"
+      },
+      "display_name": "Hat 1 - IDS Kamera",
+      "ip": "IDS / Yerel Bağlantı",
+      "type": "ids",
+      "updated_at": "2026-04-23 17:48:24"
+    }
+  }
+}
